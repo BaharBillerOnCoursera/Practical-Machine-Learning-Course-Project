@@ -1,0 +1,150 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Bahar Biller"
+date: "November 18, 2017"
+output: html_document
+---
+
+#Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. The goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbell of six participants who were asked to perform barbell lifts correctly and incorrectly in five different ways and develop a classifier to predict the manner in which the exercises were done.
+
+To support the work, we use the following supporting R packages:
+```{r eval = FALSE}
+install.packages("caret")
+install.packages("randomForest")
+
+library(caret)
+library(randomForest)
+```
+
+#Data
+
+The data for this project comes from http://groupware.les.inf.puc-rio.br/har. We are provided both training data set and test data set later which will be utilized to make prediction for 20 test cases after the development of the classifier. The training data set contains 19,622 rows and 160 columns of data. However, it requires cleaning prior to the classifier development due to apperance of empty entries, NAs and indication of dvision by zero. Furthermore, we remove those columns whose data exhibit almost no variance. Finally, we remove the first five columns of the resulting data set as they will not be involved with the calssifier development:
+
+```{r eval = FALSE}
+#Loading the data
+setwd("C:/Documents/Data Science COURSERA")
+training = read.csv("pml-training.csv", header=TRUE,na.strings = c("NA","#DIV/0!",""))
+testing = read.csv("pml-testing.csv", header=TRUE,na.strings = c("NA","#DIV/0!",""))
+
+dim(training)
+dim(testing)
+
+#Cleaning NAs and those with nearly zero variance from the training data set 
+training <- training[, names(training)[sapply(training, function (x) ! (any(is.na(x))))]]
+training <- training[, - nearZeroVar(training)]
+training <- training[, -(1:5)] #Removing columns "x","user_name", "raw_timestamp_part_1", "raw_timestamp_part_2" and "cvtd_timestamp"
+
+dim(training)
+dim(testing)
+```
+
+After the completion of the data cleaning, we check the dimensions of the training data set and reduce the number of columns from 160 to 54. Furthermore, we divide the resulting data set into a training portion and a validation portion by following the 70-30 ratio principle: 
+
+```{r eval = FALSE}
+#Partitoning the training data into two different subsets: trainingSubset and validationSubset (follow 70-30 ratio)
+inTrainingSubset <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+trainingSubset <- training[inTrainingSubset,]
+validationSubset <- training[-inTrainingSubset,]
+
+dim(trainingSubset)
+dim(validationSubset)
+```
+Thus, the training portion has 13,737 rows of data while validation portion has 5,885 rows of data.
+
+#Model Building with Cross Validation and Out of Sample Error
+
+Due to the high prediction accuracy of Random Forest, we use this machine learning algorithm for the classifier development:
+
+```{r eval = FALSE}
+#Fitting Random Forest to trainingSubset
+set.seed(1)
+control.rf.trainingSubset <- trainControl(method="cv",number=3,verboseIter=FALSE)
+rf.trainingSubset <- train(classe~.,data=trainingSubset,method="rf",trControl=control.rf.trainingSubset)
+rf.trainingSubset$finalModel
+```
+We identify the out-of-bag estimate of error rate as 0.17%:
+
+```{r eval = FALSE}
+Call:
+ randomForest(x = x, y = y, mtry = param$mtry) 
+               Type of random forest: classification
+                     Number of trees: 500
+No. of variables tried at each split: 27
+
+        OOB estimate of  error rate: 0.17%
+Confusion matrix:
+     A    B    C    D    E  class.error
+A 3905    0    0    0    1 0.0002560164
+B    5 2650    3    0    0 0.0030097818
+C    0    5 2390    1    0 0.0025041736
+D    0    0    5 2246    1 0.0026642984
+E    0    0    0    3 2522 0.0011881188
+```
+Finally, apply the random forest to the validation data set: 
+
+```{r eval = FALSE}
+#Applying Random Forest Fit to validationSubset
+yhat.Validation.rf <- predict(rf.trainingSubset, newdata=validationSubset)
+confusionMatrix(yhat.Validation.rf, validationSubset$classe)
+```
+
+```{r eval = FALSE}
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 1673    5    0    0    0
+         B    1 1130    1    0    3
+         C    0    3 1025    2    0
+         D    0    1    0  962    0
+         E    0    0    0    0 1079
+
+Overall Statistics
+                                          
+               Accuracy : 0.9973          
+                 95% CI : (0.9956, 0.9984)
+    No Information Rate : 0.2845          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.9966          
+ Mcnemar's Test P-Value : NA              
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            0.9994   0.9921   0.9990   0.9979   0.9972
+Specificity            0.9988   0.9989   0.9990   0.9998   1.0000
+Pos Pred Value         0.9970   0.9956   0.9951   0.9990   1.0000
+Neg Pred Value         0.9998   0.9981   0.9998   0.9996   0.9994
+Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
+Detection Rate         0.2843   0.1920   0.1742   0.1635   0.1833
+Detection Prevalence   0.2851   0.1929   0.1750   0.1636   0.1833
+Balanced Accuracy      0.9991   0.9955   0.9990   0.9989   0.9986
+```
+
+#Prediction for 20 Different Test Cases
+
+We conclude with the application of the random forest to the test cases: 
+
+```{r eval = FALSE}
+#Applying Random Forest Fit to testing
+yhat.Testing.rf <- predict(rf.trainingSubset, newdata=testing)
+yhat.Testing.rf
+```
+
+We obtain the following predictions:
+ 
+```{r eval = FALSE}
+ [1] B A B A A E D B A A B C B A E E A B B B
+Levels: A B C D E
+```
+
+
+
+
+
+
+
+
